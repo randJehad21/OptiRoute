@@ -1,0 +1,102 @@
+# 📦 Install required libraries (run in Colab)
+!pip install openrouteservice folium
+
+# 🚀 Map generation script
+import folium
+import openrouteservice
+
+# OpenRouteService API key
+api_key = "5b3ce3597851110001cf6248d1010eeb95ea46e3a54b0eaa55640d8d"
+client = openrouteservice.Client(key=api_key)
+
+# Coordinates [longitude, latitude] mapped to new visit order
+coordinates = [
+    [46.74032442208924, 24.595356831188536],  # Tamara Dates
+    [46.6909462, 24.7194598],  # A1-P-SH
+    [46.6909123, 24.7283786],  # A1-T-SN
+    [46.674702, 24.731641],  # A1-SN-WD
+    [46.67471245, 24.73181901],  # A1-SN-OY
+    [46.67942164, 24.74379309],  # A1-D-KF
+    [46.6837359, 24.7559616],  # A1-J-MT
+    [46.674567, 24.760752],  # A1-P-MF (2)
+    [46.66890489, 24.77191384],  # A1-C-NL
+    [46.66511644, 24.77010894],  # A1-D-GR
+    [46.65507078, 24.77327743],  # A1-J-RI
+    [46.64908309, 24.7910008],  # A1-T-RI
+    [46.6420482, 24.7984362],  # A1-P-YK
+    [46.64220638, 24.79816323],  # A1-P-SA
+    [46.66907814, 24.80750705],  # A1-P-RI
+    [46.6740985, 24.80129],  # A1-T-NDA
+    [46.688954, 24.770748],  # A1-P-MF
+    [46.7143295, 24.764191],  # A1-SNZ-NZ
+    [46.7158892, 24.7588202],  # A1-ML-NZ
+    [46.712862, 24.7574589],  # A1-T-NZ
+    [46.7231027, 24.761595],  # A1-D-MG
+    [46.7100689, 24.778361],  # A1-P-IZ
+    [46.7291759, 24.7809357],  # A1-C-GH
+    [46.72534301, 24.81460881],  # A1-P-NS
+    [46.72534301, 24.81469646],  # A1-P-MH
+    [46.7430598, 24.8369625],  # A1-P-HM
+    [46.68674659, 24.8192612],  # A1-T-NS (2)
+    [46.69285654, 24.80675473],  # A1-P-NA (2)
+    [46.69284581, 24.80675473],  # A1-P-NA
+    [46.65027672, 24.82268059],  # A1-SYN-YN
+    [46.64246374, 24.82055699],  # A1-T-YN
+    [46.63035005, 24.82200725],  # A1-J-YN
+    [46.65527799, 24.82360708],  # A1-D-YN
+    [46.64687467, 24.85843413],  # A1-T-NS
+    [46.6640234, 24.7537898],  # A1-SN-MJ
+    [46.74032442208924, 24.595356831188536],  # Tamara Dates
+]
+
+location_names = [
+    "Tamara Dates", "A1-P-SH", "A1-T-SN", "A1-SN-WD", "A1-SN-OY", "A1-D-KF", "A1-J-MT", "A1-P-MF (2)",
+    "A1-C-NL", "A1-D-GR", "A1-J-RI", "A1-T-RI", "A1-P-YK", "A1-P-SA", "A1-P-RI", "A1-T-NDA", "A1-P-MF",
+    "A1-SNZ-NZ", "A1-ML-NZ", "A1-T-NZ", "A1-D-MG", "A1-P-IZ", "A1-C-GH", "A1-P-NS", "A1-P-MH", "A1-P-HM",
+    "A1-T-NS (2)", "A1-P-NA (2)", "A1-P-NA", "A1-SYN-YN", "A1-T-YN", "A1-J-YN", "A1-D-YN", "A1-T-NS",
+    "A1-SN-MJ", "Tamara Dates"
+]
+
+# Create the map centered at the depot
+m = folium.Map(location=coordinates[0][::-1], zoom_start=11)
+
+# Add markers with ranking and name
+for i, coord in enumerate(coordinates):
+    folium.Marker(
+        location=coord[::-1],
+        popup=f"{i+1}. {location_names[i]}",
+        tooltip=f"{i+1}. {location_names[i]}",
+        icon=folium.Icon(color="purple", icon="info-sign")
+    ).add_to(m)
+
+# Add road-following TSP lines
+for i in range(len(coordinates) - 1):
+    start = coordinates[i]
+    end = coordinates[i + 1]
+    route = client.directions([start, end], profile='driving-car', format='geojson')
+    coords = route['features'][0]['geometry']['coordinates']
+
+    folium.PolyLine(
+        locations=[pt[::-1] for pt in coords],
+        color="purple",
+        weight=5,
+        opacity=0.7
+    ).add_to(m)
+
+    if len(coords) >= 2:
+        mid = coords[len(coords) // 2]
+        folium.RegularPolygonMarker(
+            location=mid[::-1],
+            number_of_sides=3,
+            radius=6,
+            color='purple',
+            fill_color='purple',
+            rotation=0
+        ).add_to(m)
+
+# Save and download the map
+m.save("a1_tsp_map_v2.html")
+
+# Download in Colab
+from google.colab import files
+files.download("a1_tsp_map_v2.html")
