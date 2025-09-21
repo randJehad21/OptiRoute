@@ -5,6 +5,7 @@ import pandas as pd
 import openrouteservice
 import folium
 from streamlit_folium import st_folium
+import plotly.express as px
 
 # --- Setup ---
 st.set_page_config(page_title="Date Delivery Dashboard", layout="wide")
@@ -162,17 +163,59 @@ if search_query:
 else:
     filtered_df = edited_df
 
-# --- DATA EDITOR ---
-st.subheader("📋 Enter Demand for Stores")
-edited_part = st.data_editor(filtered_df, use_container_width=True, num_rows="dynamic", key="editor")
-edited_df.update(edited_part)
+
+
+
+    
+
+
+
+    # --- LAYOUT WITH COLUMNS ---
+st.subheader("📋 Store Demand & Distribution")
+
+col1, col2 = st.columns([1.2, 1])  # adjust ratio as needed
+
+with col1:
+    # Table (only store + demand)
+    editor_view = edited_df[["store", "demand (boxes)"]].copy()
+    edited_part = st.data_editor(
+        editor_view,
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor"
+    )
+    edited_df["demand (boxes)"] = edited_part["demand (boxes)"]
+
+with col2:
+    # Pie Chart
+    if edited_df["demand (boxes)"].sum() > 0:
+        fig = px.pie(
+            edited_df[edited_df["demand (boxes)"] > 0],
+            values="demand (boxes)",
+            names="store",
+            color="region",
+            hole=0.4,
+            title="Demand Distribution",
+        )
+        fig.update_traces(textinfo="percent+label", pull=[0.05]*len(edited_df))
+        fig.update_layout(
+            showlegend=True,
+            legend_title="Regions",
+            legend=dict(orientation="h", y=-0.2),
+            title_x=0.5,
+            title_font=dict(size=18, color="darkblue"),
+            font=dict(size=13),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No demand entered yet. Please input demand values to see the chart.")
 
 # --- SAVE BUTTON ---
 if st.button("💾 Save All Store Demands"):
     desktop_path = "/Users/rand/Desktop/Nisreen/all_region_demands.csv"
     edited_df.to_csv(desktop_path, index=False)
     st.success(f"All demands saved to: {desktop_path}")
-    st.dataframe(edited_df)
+    #st.dataframe(edited_df) hide table from showing again
 
     csv_data = edited_df.to_csv(index=False).encode("utf-8")
     st.download_button(
@@ -182,4 +225,3 @@ if st.button("💾 Save All Store Demands"):
         mime="text/csv",
         key="download_csv"
     )
-

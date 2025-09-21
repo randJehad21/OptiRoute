@@ -6,10 +6,11 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 import time
 from sklearn.cluster import KMeans
 import math
+import plotly.express as px
 
 # --- Setup ---
 st.set_page_config(page_title="Store Visit Order - VRP", layout="wide")
-st.title("🚚 Store Visit Sequence using VRP + Multi-Trip per Vehicle")
+st.title("🚚 Store Visit Sequence")
 st.caption("Optimized store visit sequence per region with vehicle capacity and trip splitting.")
 
 # --- Load Data ---
@@ -46,7 +47,7 @@ if region_df.empty:
 # --- Constants ---
 warehouse = (24.595356831188536, 46.74032442208924)
 vehicle_capacity = 400
-num_vehicles = 4
+num_vehicles = 1
 cost_per_km = 1.50
 
 # --- Helper: Cluster Stores ---
@@ -66,7 +67,26 @@ def cluster_stores(stores, k=4):
 
 # --- Helper: Split stores by capacity ---
 def split_by_capacity(stores, capacity):
-    sorted_stores = sorted(stores, key=lambda s: s["demand (boxes)"], reverse=True)
+    expanded_stores = []
+    for store in stores:
+        demand = store["demand (boxes)"]
+        if demand > capacity:
+            # Split into multiple parts
+            full_chunks = demand // capacity
+            remainder = demand % capacity
+            for _ in range(full_chunks):
+                new_store = store.copy()
+                new_store["demand (boxes)"] = capacity
+                expanded_stores.append(new_store)
+            if remainder > 0:
+                new_store = store.copy()
+                new_store["demand (boxes)"] = remainder
+                expanded_stores.append(new_store)
+        else:
+            expanded_stores.append(store)
+
+    # Now split as before
+    sorted_stores = sorted(expanded_stores, key=lambda s: s["demand (boxes)"], reverse=True)
     trips = []
     trip = []
     load = 0
@@ -129,47 +149,149 @@ def calculate_total_distance(solution, routing, manager):
     return total_distance / 1000  # km
 
 # --- Main Logic ---
-st.subheader(f"📦 Visit Sequences for Region: {selected_region}")
 stores = region_df[["store", "code", "lat", "lon", "demand (boxes)"]].to_dict(orient="records")
 clusters = cluster_stores(stores, k=num_vehicles)
 
 region_total_distance = 0
 region_total_cost = 0
+trip_summary = []  # ✅ collect trip-level data
+trip_details = []  # ✅ keep trip routes for later display
 
 for i, cluster in enumerate(clusters):
     if not cluster:
-        st.write(f"Vehicle {i+1}: No stores assigned.")
         continue
 
     cluster_total_demand = sum(s["demand (boxes)"] for s in cluster)
     trips = split_by_capacity(cluster, vehicle_capacity)
 
-    st.markdown(f"### 🚐 Vehicle {i+1} - Total demand: {cluster_total_demand} boxes - {len(trips)} trip(s)")
-
     for trip_num, trip_stores in enumerate(trips, start=1):
-        st.markdown(f"#### 🧭 Trip {trip_num}")
         route_indices, solution, routing, manager = solve_vrp(trip_stores)
         if not route_indices:
-            st.warning("No route solution found for this trip.")
             continue
-
-        for j, idx in enumerate(route_indices):
-            if idx == 0:
-                st.write(f"{j+1}. 🏢 *Warehouse*")
-            else:
-                store = trip_stores[idx - 1]
-                st.write(f"{j+1}. 🏬 *{store['store']}* ({store['code']}) — {store['demand (boxes)']} boxes")
 
         trip_distance = calculate_total_distance(solution, routing, manager)
         trip_cost = trip_distance * cost_per_km
         region_total_distance += trip_distance
         region_total_cost += trip_cost
 
-        st.write(f"**Estimated Trip Distance:** {trip_distance:.2f} km")
-        st.write(f"**Estimated Trip Cost:** {trip_cost:.2f} SAR")
+        # ✅ Collect trip summary
+        trip_summary.append({
+            "Vehicle": f"Vehicle {i+1}",
+            "Trip": f"Trip {trip_num}",
+            "Stores": len(trip_stores),
+            "Demand": sum(s["demand (boxes)"] for s in trip_stores),
+            "Distance (km)": trip_distance,
+            "Cost (SAR)": trip_cost
+        })
 
-# --- Region Summary ---
+        # ✅ Collect trip details for display later
+        route_steps = []
+        for j, idx in enumerate(route_indices):
+            if idx == 0:
+                route_steps.append(f"{j+1}. 🏢 *Warehouse*")
+            else:
+                store = trip_stores[idx - 1]
+                route_steps.append(f"{j+1}. 🏬 {store['store']} — {store['demand (boxes)']} boxes")
+
+        trip_details.append({
+            "Vehicle": f"Vehicle {i+1}",
+            "Trip": f"Trip {trip_num}",
+            "Route": route_steps,
+            "Distance": trip_distance,
+            "Cost": trip_cost
+        })
+
+
+# --- Region Summary Cards ---
+region_total_demand = region_df["demand (boxes)"].sum()
+st.markdown("<h2 style='text-align:center'>📊 Region Summary</h2>", unsafe_allow_html=True)
+col1, col2, col3 = st.columns(3)
+card_style = "background-color:#f0f2f6;padding:20px;border-radius:12px;text-align:center;box-shadow: 2px 2px 12px rgba(0,0,0,0.1);"
+
+with col1:
+    st.markdown(f"<div style='{card_style}'>🚚<br><b>Total Distance</b><br><span style='font-size:24px;color:#1f77b4'>{region_total_distance:.2f} km</span></div>", unsafe_allow_html=True)
+with col2:
+    st.markdown(f"<div style='{card_style}'>💰<br><b>Total Cost</b><br><span style='font-size:24px;color:#ff7f0e'>{region_total_cost:.2f} SAR</span></div>", unsafe_allow_html=True)
+with col3:
+    st.markdown(f"<div style='{card_style}'>📦<br><b>Total Demand</b><br><span style='font-size:24px;color:#2ca02c'>{region_total_demand:.0f} boxes</span></div>", unsafe_allow_html=True)
+
 st.markdown("---")
-st.subheader("📊 Region Summary")
-st.write(f"**Estimated Total Distance:** {region_total_distance:.2f} km")
-st.write(f"**Estimated Total Cost:** {region_total_cost:.2f} SAR")
+
+
+
+# --- Trip Details (BOTTOM) ---
+st.markdown("---")
+st.subheader("🧭 Trip Details")
+
+if trip_details:
+    for trip in trip_details:
+        st.markdown(f"### 🚐 {trip['Trip']}")
+
+        # 👉 Join route with arrows
+        route_str = " → ".join(trip["Route"])
+
+        # 👉 Layout: two columns (route | summary table)
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.write(route_str)
+
+        with col2:
+            trip_summary_df = pd.DataFrame(
+                {
+                    "Metric": ["Distance (km)", "Cost (SAR)"],
+                    "Value": [f"{trip['Distance']:.2f}", f"{trip['Cost']:.2f}"]
+                }
+            )
+            st.table(trip_summary_df)
+
+
+
+# --- Region Summary (TOP) ---
+st.markdown("---")
+st.subheader(f"📊 Region Summary for {selected_region}")
+
+# Prepare data for bar chart
+summary_df = pd.DataFrame(trip_summary)
+
+# Add total row
+total_distance = summary_df["Distance (km)"].sum()
+total_cost = summary_df["Cost (SAR)"].sum()
+summary_df_totals = pd.DataFrame({
+    "Trip": ["Total"],
+    "Distance (km)": [total_distance],
+    "Cost (SAR)": [total_cost],
+    "Vehicle": [""]
+})
+
+summary_df = pd.concat([summary_df, summary_df_totals], ignore_index=True)
+
+# Melt for plotting
+melted_df = summary_df.melt(
+    id_vars=["Trip", "Vehicle"],
+    value_vars=["Distance (km)", "Cost (SAR)"],
+    var_name="Metric",
+    value_name="Value"
+)
+
+# Assign custom colors: blue/red for trips, green/lightgreen for total
+def color_mapper(row):
+    if row["Trip"] == "Total":
+        return "green" if row["Metric"] == "Cost (SAR)" else "lightgreen"
+    else:
+        return "red" if row["Metric"] == "Cost (SAR)" else "blue"
+
+melted_df["Color"] = melted_df.apply(color_mapper, axis=1)
+
+# Plot
+fig = px.bar(
+    melted_df,
+    x="Trip",
+    y="Value",
+    color="Color",
+    text="Value",
+    barmode="group",
+    title="📊 Distance and Cost per Trip"
+)
+
+fig.update_traces(texttemplate="%{y:.2f}", textposition="outside", showlegend=False)
+st.plotly_chart(fig, use_container_width=True)
