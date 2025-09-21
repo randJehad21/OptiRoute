@@ -213,7 +213,9 @@ with col2:
 # --- SAVE BUTTON ---
 if st.button("💾 Save All Store Demands"):
     desktop_path = "/Users/rand/Desktop/Nisreen/all_region_demands.csv"
-    edited_df.to_csv(desktop_path, index=False)
+    # edited_df.to_csv(desktop_path, index=False)
+    edited_df.to_csv("demand_data.csv", index=False)
+
     st.success(f"All demands saved to: {desktop_path}")
     #st.dataframe(edited_df) hide table from showing again
 
