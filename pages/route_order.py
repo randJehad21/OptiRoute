@@ -13,23 +13,32 @@ st.set_page_config(page_title="Store Visit Order - VRP", layout="wide")
 st.title("🚚 Store Visit Sequence")
 st.caption("Optimized store visit sequence per region with vehicle capacity and trip splitting.")
 
-# --- Load Data ---
-@st.cache_data(ttl=60)
-def load_demand_data():
-    try:
-        df = pd.read_csv("/Users/rand/Desktop/Nisreen/all_region_demands.csv")
-        df.columns = df.columns.str.strip().str.lower()
-        return df
-    except FileNotFoundError:
-        st.error("❌ Demand data file not found.")
-        st.stop()
+# # --- Load Data for desktop---
+# @st.cache_data(ttl=60)
+# def load_demand_data():
+#     try:
+#         df = pd.read_csv("/Users/rand/Desktop/Nisreen/all_region_demands.csv")
+#         df.columns = df.columns.str.strip().str.lower()
+#         return df
+#     except FileNotFoundError:
+#         st.error("❌ Demand data file not found.")
+#         st.stop()
 
-if st.button("🔄 Refresh Data"):
-    st.cache_data.clear()
-    time.sleep(0.5)
-    st.rerun()
+# if st.button("🔄 Refresh Data"):
+#     st.cache_data.clear()
+#     time.sleep(0.5)
+#     st.rerun()
 
-df = load_demand_data()
+# df = load_demand_data()
+
+# --- Load Data from Session State ---
+if 'demand_data' in st.session_state:
+    df = st.session_state['demand_data']
+    df = df[df["demand (boxes)"] > 0]
+else:
+    st.warning("❌ No demand data found. Please enter the demand first on the main page.")
+    st.stop()
+
 
 # --- Region Selection ---
 regions_with_demand = sorted(df[df["demand (boxes)"] > 0]["region"].dropna().unique())

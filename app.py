@@ -210,15 +210,30 @@ with col2:
     else:
         st.info("No demand entered yet. Please input demand values to see the chart.")
 
+# # --- SAVE BUTTON ---
+# if st.button("💾 Save All Store Demands"):
+#     desktop_path = "/Users/rand/Desktop/Nisreen/all_region_demands.csv"
+#     # edited_df.to_csv(desktop_path, index=False)
+#     edited_df.to_csv("demand_data.csv", index=False)
+
+#     st.success(f"All demands saved to: {desktop_path}")
+#     #st.dataframe(edited_df) hide table from showing again
+
+#     csv_data = edited_df.to_csv(index=False).encode("utf-8")
+#     st.download_button(
+#         label="⬇️ Download Demand CSV",
+#         data=csv_data,
+#         file_name="all_region_demands.csv",
+#         mime="text/csv",
+#         key="download_csv"
+#     )
+
 # --- SAVE BUTTON ---
 if st.button("💾 Save All Store Demands"):
-    desktop_path = "/Users/rand/Desktop/Nisreen/all_region_demands.csv"
-    # edited_df.to_csv(desktop_path, index=False)
-    edited_df.to_csv("demand_data.csv", index=False)
-
-    st.success(f"All demands saved to: {desktop_path}")
-    #st.dataframe(edited_df) hide table from showing again
-
+    # Store in session state
+    st.session_state['demand_data'] = edited_df.copy()
+    
+    # Optional: Save CSV (for download only)
     csv_data = edited_df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="⬇️ Download Demand CSV",
@@ -227,3 +242,5 @@ if st.button("💾 Save All Store Demands"):
         mime="text/csv",
         key="download_csv"
     )
+
+    st.success("All demands have been saved in memory and are ready to use on other pages.")
